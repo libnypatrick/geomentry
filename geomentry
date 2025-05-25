@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Geometric Particle Trail</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      cursor: none; /* Hide the pointer */
+    }
+  </style>
+</head>
+<body>
+  <script>
+    let particles = [];
+    let prevMouse;
+
+    const palette = [
+      '#ff2e7e', '#f29cc6', '#f98bbd',     // vibrant & soft pinks
+      '#c965e3', '#ae60c7', '#e6ccf5',     // purples
+      '#bb84d9', '#d52674',                // pastel & dark pinks
+      '#00b589', '#30343f'                 // occasional teal & gray
+    ];
+
+    const shapeTypes = ['circle', 'rect', 'triangle', 'parallelogram'];
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+      prevMouse = createVector(mouseX, mouseY);
+      angleMode(DEGREES);
+    }
+
+    function draw() {
+      background(245, 245, 245); // clear frame
+
+      let mouse = createVector(mouseX, mouseY);
+      let velocity = p5.Vector.sub(mouse, prevMouse);
+      let speed = velocity.mag();
+
+      let particleCount = floor(map(speed, 0, 50, 0, 12, true));
+
+      for (let i = 0; i < particleCount; i++) {
+        if (random(1) < 0.005) { // rarer asterisk
+          particles.push(new AsteriskParticle(mouse.x, mouse.y));
+        } else {
+          particles.push(new Particle(mouse.x, mouse.y, velocity.copy()));
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.update();
+        p.display();
+        if (p.isDead()) {
+          particles.splice(i, 1);
+        }
+      }
+
+      prevMouse = mouse.copy();
+    }
+
+    class Particle {
+      constructor(x, y, velocity) {
+        this.pos = createVector(x, y);
+        this.vel = velocity.add(p5.Vector.random2D().mult(random(0.5, 1.2)));
+        this.acc = createVector(0, 0);
+        this.rotation = this.vel.heading();
+        this.angularVel = random(-5, 5);
+        this.angle = random(360);
+        this.lifespan = 255;
+        this.stableTime = 30; // visible for a bit before fading
+        this.size = random(20, 50);
+        this.shape = random(shapeTypes);
+        this.baseColor = color(random(palette));
+      }
+
+      update() {
+        this.vel.mult(0.96);
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+        this.acc.mult(0);
+        this.rotation = this.vel.heading();
+        this.angle += this.angularVel;
+
+        if (this.stableTime > 0) {
+          this.stableTime--;
+        } else {
+          this.lifespan -= 12;
+        }
+      }
+
+      display() {
+        push();
+        translate(this.pos.x, this.pos.y);
+        rotate(this.rotation + this.angle);
+        noStroke();
+        let c = color(this.baseColor);
+        c.setAlpha(this.stableTime > 0 ? 255 : this.lifespan);
+        fill(c);
+
+        switch (this.shape) {
+          case 'circle':
+            ellipse(0, 0, this.size);
+            break;
+
+          case 'rect':
+            rectMode(CENTER);
+            rect(0, 0, this.size, this.size / 4, this.size / 6);
+            break;
+
+          case 'triangle':
+            let h = this.size * 0.866;
+            triangle(
+              -this.size / 2, h / 2,
+              0, -h / 2,
+              this.size / 2, h / 2
+            );
+            break;
+
+          case 'parallelogram':
+            beginShape();
+            let offset = this.size / 4;
+            vertex(-this.size / 2 + offset, -this.size / 4);
+            vertex(this.size / 2 + offset, -this.size / 4);
+            vertex(this.size / 2 - offset, this.size / 4);
+            vertex(-this.size / 2 - offset, this.size / 4);
+            endShape(CLOSE);
+            break;
+        }
+
+        pop();
+      }
+
+      isDead() {
+        return this.lifespan <= 0;
+      }
+    }
+
+    class AsteriskParticle {
+      constructor(x, y) {
+        this.pos = createVector(x, y);
+        this.vel = p5.Vector.random2D().mult(random(1, 3));
+        this.acc = createVector(0, 0);
+        this.angle = random(360);
+        this.angularVel = random(-3, 3);
+        this.size = 30; // fixed medium size
+        this.lifespan = 255;
+        this.blink = true;
+        this.blinkTimer = 10;
+        this.stableTime = 60; // stays longer
+        this.fadeRate = 4;
+        this.baseColor = color('#00b589'); // teal
+      }
+
+      update() {
+        this.vel.mult(0.97);
+        this.vel.add(this.acc);
+        this.pos.add(this.vel);
+        this.acc.mult(0);
+        this.angle += this.angularVel;
+
+        if (this.blinkTimer > 0) {
+          this.blinkTimer--;
+          this.blink = this.blinkTimer % 2 === 0;
+        } else if (this.stableTime > 0) {
+          this.stableTime--;
+        } else {
+          this.lifespan -= this.fadeRate;
+        }
+      }
+
+      display() {
+        if (!this.blink) return;
+
+        push();
+        translate(this.pos.x, this.pos.y);
+        rotate(this.angle);
+        let c = color(this.baseColor);
+        c.setAlpha(this.lifespan);
+        stroke(c);
+        strokeWeight(4);
+        strokeCap(ROUND);
+        let len = this.size;
+        for (let i = 0; i < 6; i++) {
+          let angle = i * 60;
+          let x = cos(angle) * len / 2;
+          let y = sin(angle) * len / 2;
+          line(-x, -y, x, y);
+        }
+        pop();
+      }
+
+      isDead() {
+        return this.lifespan <= 0;
+      }
+    }
+
+    function windowResized() {
+      resizeCanvas(windowWidth, windowHeight);
+    }
+  </script>
+</body>
+</html>
